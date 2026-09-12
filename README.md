@@ -18,3 +18,18 @@ The initial macOS app uses Swift and SwiftUI. Native Network Extension and Endpo
 
 Public development takes place on feature branches. Local conversation transcripts, diagnostic output, personal paths, credentials, and research scratch files are excluded from commits.
 
+## Build and run
+
+Requires macOS 14 or newer and a Swift 6 toolchain.
+
+```sh
+swift test
+bash scripts/build-app.sh
+open "build/Agent Guard.app"
+```
+
+Click the shield in the menu bar and open the configuration window. Add applications and sensitive paths, then use the preview button to simulate a rule decision. All preview events are synthetic and retained only in memory.
+
+Configuration is stored in `~/Library/Application Support/AgentGuard/configuration.json`. For isolated development runs, set `AGENT_GUARD_DATA_DIR` when launching the executable. The build script creates an ad-hoc signed local development app; it does not install privileged services or produce a notarized distribution.
+
+See the [architecture and limitations](docs/architecture.md) and [implementation milestones](docs/roadmap.md).
