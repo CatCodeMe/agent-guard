@@ -82,7 +82,7 @@ final class PolicyTests: XCTestCase {
     }
 
     func testSandboxRuntimeProbeDoesNotSearchOutsideProvidedPath() {
-        let status = SandboxRuntimeProbe.current(environment: ["PATH": ""])
+        let status = SandboxRuntimeProbe.current(environment: ["PATH": ""], includeStandardPaths: false)
         XCTAssertEqual(status.state, .unavailable)
         XCTAssertNil(status.executablePath)
         XCTAssertNil(status.nodePath)

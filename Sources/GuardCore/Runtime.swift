@@ -80,12 +80,15 @@ public struct SandboxRuntimeStatus: Equatable, Sendable {
 
 public enum SandboxRuntimeProbe {
     public static func current(
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        includeStandardPaths: Bool = true
     ) -> SandboxRuntimeStatus {
         var pathEntries = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
         // Finder-launched apps often receive a shorter PATH than a shell. Keep
         // discovery useful without invoking a shell or executing the command.
-        pathEntries.append(contentsOf: ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])
+        if includeStandardPaths {
+            pathEntries.append(contentsOf: ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"])
+        }
         var seen = Set<String>()
         pathEntries = pathEntries.filter { seen.insert($0).inserted }
         let srt = findExecutable(named: "srt", in: pathEntries)
