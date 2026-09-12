@@ -6,11 +6,13 @@ import GuardCore
 final class GuardStore: ObservableObject {
     @Published private(set) var configuration = GuardConfiguration()
     @Published private(set) var configurationError: String?
+    @Published private(set) var notificationError: String?
     @Published private(set) var previewEvents: [PreviewEvent] = []
     @Published private(set) var sandboxRuntimeStatus = SandboxRuntimeProbe.current()
     @Published private(set) var endpointSecurityState: EndpointSecurityState = .notStarted
     private var loadFailed = false
     private let endpointSecurityBackend = EndpointSecurityBackend()
+    private let notificationCoordinator = NotificationCoordinator.shared
     let configurationURL: URL
 
     init(directory: URL? = nil) {
@@ -23,6 +25,12 @@ final class GuardStore: ObservableObject {
         catch {
             loadFailed = true
             configurationError = error.localizedDescription
+        }
+        notificationCoordinator.onAction = { [weak self] eventID, action in
+            self?.resolvePreviewEvent(eventID, action: action)
+        }
+        notificationCoordinator.onError = { [weak self] message in
+            self?.notificationError = message
         }
         probeEndpointSecurity()
     }
@@ -127,14 +135,44 @@ final class GuardStore: ObservableObject {
         }
     }
 
-    func preview(_ rule: SensitivePathRule) {
+    func testNotification(_ rule: SensitivePathRule) {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let decision = PolicyPreview.evaluate(path: rule.path, rules: configuration.rules, homeDirectory: home)
-        previewEvents.insert(.init(
-            id: UUID(), date: Date(), ruleName: rule.name,
-            action: decision?.action.label ?? "没有启用的匹配规则"
-        ), at: 0)
+        let eventID = UUID()
+        let action = decision?.action.label ?? "没有启用的匹配规则"
+        previewEvents.insert(.init(id: eventID, date: Date(), ruleName: rule.name, action: action), at: 0)
         previewEvents = Array(previewEvents.prefix(50))
+        notificationError = nil
+        notificationCoordinator.sendTestEvent(id: eventID, ruleName: rule.name, configuredAction: action)
+    }
+
+    private func resolvePreviewEvent(_ id: UUID, action: NotificationAction) {
+        guard let index = previewEvents.firstIndex(where: { $0.id == id }) else { return }
+        previewEvents[index].resolution = PreviewResolution(action)
+    }
+}
+
+enum PreviewResolution: String {
+    case pending
+    case allowedOnce
+    case blocked
+    case opened
+
+    init(_ action: NotificationAction) {
+        switch action {
+        case .allowOnce: self = .allowedOnce
+        case .block: self = .blocked
+        case .open: self = .opened
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .pending: return "等待用户操作"
+        case .allowedOnce: return "用户选择允许一次"
+        case .blocked: return "用户选择阻止"
+        case .opened: return "用户打开 Agent Guard"
+        }
     }
 }
 
@@ -143,4 +181,5 @@ struct PreviewEvent: Identifiable {
     let date: Date
     let ruleName: String
     let action: String
+    var resolution: PreviewResolution = .pending
 }

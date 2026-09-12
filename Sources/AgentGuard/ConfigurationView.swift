@@ -22,7 +22,7 @@ struct ConfigurationView: View {
                     .background(.quaternary, in: Capsule())
             }.padding(24)
 
-            Label("系统监控尚未接入。下方设置仅保存配置，不会记录真实访问或阻止操作。",
+            Label("真实文件与网络监控尚未接入；现在可以用本地通知测试完整的用户决策流程。",
                   systemImage: "info.circle")
                 .font(.callout).foregroundStyle(.secondary)
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -31,6 +31,10 @@ struct ConfigurationView: View {
             if let error = store.configurationError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red).padding(.horizontal, 24).padding(.top, 12)
+            }
+            if let error = store.notificationError {
+                Label(error, systemImage: "bell.badge")
+                    .foregroundStyle(.orange).padding(.horizontal, 24).padding(.top, 8)
             }
 
             TabView {
@@ -104,31 +108,33 @@ struct ConfigurationView: View {
                         )) {
                             ForEach(RuleAction.allCases, id: \.self) { Text($0.label).tag($0) }
                         }.labelsHidden().frame(width: 100).disabled(!store.canEdit)
-                        Button("预演") { store.preview(rule) }.help("仅模拟规则匹配，不会访问文件")
+                        Button("测试通知") { store.testNotification(rule) }
+                            .help("发送带操作按钮的本地测试通知，不会访问或阻止文件")
                         Button { store.removeRule(rule.id) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless).help("仅移除规则，不会删除文件").disabled(!store.canEdit)
                     }.padding(.vertical, 5)
                 }.listStyle(.inset)
             }
-            Text("“询问我”的实时行为需由系统后端验证；文件授权有响应期限，不能无限等待。")
+            Text("“测试通知”只验证通知和用户选择；真实的文件拦截仍需 Endpoint Security 事件后端。")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(14)
     }
 
     private var events: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("规则预演记录").font(.headline)
-            Text("目前仅显示本次运行中的预演。没有采集真实应用活动；预演不执行任何文件操作。")
+            Text("通知测试记录").font(.headline)
+            Text("目前仅显示本次运行中的测试事件。通知中的操作会回写到这里；不会采集真实应用活动或执行文件操作。")
                 .font(.callout).foregroundStyle(.secondary)
             if store.previewEvents.isEmpty {
-                empty("没有记录", detail: "在重点文件中点“预演”，查看规则将选择的处理方式。", icon: "clock")
+                empty("没有记录", detail: "在重点文件中点“测试通知”，然后在通知栏选择一个操作。", icon: "clock")
             } else {
                 List(store.previewEvents) { event in
                     HStack {
-                        Image(systemName: "play.rectangle").foregroundStyle(.indigo)
+                        Image(systemName: event.resolution == .pending ? "bell" : "checkmark.circle")
+                            .foregroundStyle(event.resolution == .pending ? .indigo : .green)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.ruleName)
-                            Text("模拟事件 · 配置动作：\(event.action) · 未执行拦截")
+                            Text("模拟事件 · 配置动作：\(event.action) · \(event.resolution.label)")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -143,6 +149,7 @@ struct ConfigurationView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("配置与实际保护分开显示").font(.headline)
             capability("菜单栏与本地配置", detail: "可用", icon: "checkmark.circle")
+            capability("macOS 本地通知测试", detail: "可用", icon: "bell.badge")
             capability("应用网络监控与阻断", detail: "未接入 Network Extension", icon: "circle.dashed")
             capability("敏感文件访问监控", detail: store.endpointSecurityState.label, icon: "circle.dashed")
             Text(store.endpointSecurityState.detail)
