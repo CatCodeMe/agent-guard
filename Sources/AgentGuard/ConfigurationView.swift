@@ -48,9 +48,10 @@ struct ConfigurationView: View {
             HStack {
                 Text("关注的应用").font(.headline)
                 Spacer()
+                Button("识别常见 Agent") { store.discoverCommonAgents() }
                 Button("添加应用或 CLI…", action: chooseApplication).disabled(!store.canEdit)
             }
-            Text("桌面应用与 CLI 共用规则模型。添加成功不代表已建立进程身份或启用保护。")
+            Text("识别只检查常见安装路径，不会启动或修改 Codex、Claude、Cursor 等应用；添加成功也不代表已经启用保护。")
                 .font(.callout).foregroundStyle(.secondary)
             if store.configuration.applications.isEmpty {
                 empty("添加第一个应用", detail: "选择 .app 或 CLI 可执行文件。不会启动或修改所选应用。", icon: "app.dashed")
@@ -61,7 +62,8 @@ struct ConfigurationView: View {
                             .foregroundStyle(.indigo).frame(width: 24)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(app.name).font(.body.weight(.medium))
-                            Text(app.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            Text("\(app.agentKind?.label ?? AgentKind.custom.label) · \(app.path)")
+                                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                         }
                         Spacer()
                         Text("待接入").font(.caption).foregroundStyle(.secondary)
@@ -144,7 +146,10 @@ struct ConfigurationView: View {
             capability("应用网络监控与阻断", detail: "未接入 Network Extension", icon: "circle.dashed")
             capability("敏感文件访问监控", detail: "未接入 Endpoint Security", icon: "circle.dashed")
             capability("HTTPS 敏感内容检查", detail: "未接入检查代理", icon: "circle.dashed")
-            capability("受控启动隔离", detail: "sandbox-runtime 待评估，当前没有 Node 依赖", icon: "circle.dashed")
+            capability("受控启动隔离", detail: store.sandboxRuntimeStatus.label, icon: "circle.dashed")
+            Text(store.sandboxRuntimeStatus.detail)
+                .foregroundStyle(.secondary).font(.caption)
+            Button("重新检测可选后端") { store.refreshSandboxRuntimeStatus() }
             Divider()
             Text("配置保存在本机，不上传云端。读取私钥与发送私钥是两类独立事件。")
                 .foregroundStyle(.secondary).font(.callout)

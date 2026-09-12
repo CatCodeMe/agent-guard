@@ -71,4 +71,33 @@ final class PolicyTests: XCTestCase {
         XCTAssertThrowsError(try ConfigurationFile.load(from: url))
         XCTAssertEqual(try Data(contentsOf: url), bytes)
     }
+
+    func testOlderApplicationConfigurationCanOmitOptionalAgentKind() throws {
+        let bytes = Data(#"{"schemaVersion":1,"applications":[{"id":"00000000-0000-0000-0000-000000000001","name":"Legacy","path":"/opt/legacy","bundleIdentifier":null}],"rules":[]}"#.utf8)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try bytes.write(to: url)
+        let configuration = try ConfigurationFile.load(from: url)
+        XCTAssertEqual(configuration.applications.first?.agentKind, nil)
+    }
+
+    func testSandboxRuntimeProbeDoesNotSearchOutsideProvidedPath() {
+        let status = SandboxRuntimeProbe.current(environment: ["PATH": ""])
+        XCTAssertEqual(status.state, .unavailable)
+        XCTAssertNil(status.executablePath)
+        XCTAssertNil(status.nodePath)
+    }
+
+    func testSandboxRuntimeInvocationKeepsArgumentsOutOfShell() {
+        let invocation = SandboxRuntimeAdapter.invocation(
+            executablePath: "/opt/homebrew/bin/srt",
+            settingsURL: URL(fileURLWithPath: "/tmp/guard settings.json"),
+            commandPath: "/bin/echo",
+            arguments: ["$HOME", "a; echo unsafe"]
+        )
+        XCTAssertEqual(
+            invocation.processArguments,
+            ["--settings", "/tmp/guard settings.json", "/bin/echo", "$HOME", "a; echo unsafe"]
+        )
+    }
 }

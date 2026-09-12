@@ -7,6 +7,7 @@ final class GuardStore: ObservableObject {
     @Published private(set) var configuration = GuardConfiguration()
     @Published private(set) var configurationError: String?
     @Published private(set) var previewEvents: [PreviewEvent] = []
+    @Published private(set) var sandboxRuntimeStatus = SandboxRuntimeProbe.current()
     private var loadFailed = false
     let configurationURL: URL
 
@@ -37,6 +38,10 @@ final class GuardStore: ObservableObject {
     }
 
     func addApplication(_ url: URL) {
+        addApplication(url, agentKind: nil)
+    }
+
+    private func addApplication(_ url: URL, agentKind: AgentKind?) {
         let isApp = url.pathExtension.lowercased() == "app"
         guard isApp || FileManager.default.isExecutableFile(atPath: url.path) else {
             configurationError = "请选择 .app 应用或可执行文件。"
@@ -51,8 +56,36 @@ final class GuardStore: ObservableObject {
             ?? url.deletingPathExtension().lastPathComponent
         update {
             guard !$0.applications.contains(where: { $0.path == url.path }) else { return }
-            $0.applications.append(.init(name: name, path: url.path, bundleIdentifier: bundle?.bundleIdentifier))
+            $0.applications.append(.init(
+                name: name, path: url.path, bundleIdentifier: bundle?.bundleIdentifier,
+                agentKind: agentKind
+            ))
         }
+    }
+
+    func discoverCommonAgents() {
+        var found = 0
+        for preset in AgentCatalog.common {
+            for candidate in preset.candidatePaths {
+                let url = URL(fileURLWithPath: candidate)
+                let isApp = url.pathExtension.lowercased() == "app"
+                let exists = isApp
+                    ? Bundle(url: url)?.executableURL != nil
+                    : FileManager.default.isExecutableFile(atPath: candidate)
+                guard exists else { continue }
+                let wasPresent = configuration.applications.contains { $0.path == candidate }
+                addApplication(url, agentKind: preset.kind)
+                if !wasPresent { found += 1 }
+                break
+            }
+        }
+        if found == 0 {
+            configurationError = "没有在常见安装路径找到新的 Agent；也可以手动添加应用或 CLI。"
+        }
+    }
+
+    func refreshSandboxRuntimeStatus() {
+        sandboxRuntimeStatus = SandboxRuntimeProbe.current()
     }
 
     func addRule(_ rule: SensitivePathRule) {

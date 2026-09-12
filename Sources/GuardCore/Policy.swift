@@ -12,6 +12,20 @@ public enum RuleAction: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum AgentKind: String, Codable, CaseIterable, Sendable {
+    case desktop
+    case cli
+    case custom
+
+    public var label: String {
+        switch self {
+        case .desktop: "桌面应用"
+        case .cli: "CLI 运行时"
+        case .custom: "自定义"
+        }
+    }
+}
+
 public enum PathScope: String, Codable, CaseIterable, Sendable {
     case file, directory
 
@@ -23,12 +37,18 @@ public struct WatchedApplication: Identifiable, Codable, Equatable, Sendable {
     public var name: String
     public var path: String
     public var bundleIdentifier: String?
+    /// Optional metadata. It is absent in older configuration files.
+    public var agentKind: AgentKind?
 
-    public init(id: UUID = UUID(), name: String, path: String, bundleIdentifier: String? = nil) {
+    public init(
+        id: UUID = UUID(), name: String, path: String, bundleIdentifier: String? = nil,
+        agentKind: AgentKind? = nil
+    ) {
         self.id = id
         self.name = name
         self.path = path
         self.bundleIdentifier = bundleIdentifier
+        self.agentKind = agentKind
     }
 }
 

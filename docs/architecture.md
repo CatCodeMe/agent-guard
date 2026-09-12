@@ -6,7 +6,7 @@ Agent Guard 是常驻 macOS 菜单栏的应用安全工具。用户选择需要�
 
 首版采用 Swift、SwiftUI 和 Swift Package Manager，无第三方运行时依赖。菜单栏和系统安全接口均使用原生能力；未来跨平台时共享规则格式与行为约定，平台执行器独立实现。
 
-Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使用 sandbox-exec，Linux 使用 bubblewrap。它适合在受控启动时约束命令及其后代，不应当作为接管任意已运行桌面应用的基础。后续可作为 CLI 启动模式的可选适配器，不是当前应用依赖。
+Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使用 sandbox-exec，Linux 使用 bubblewrap。它通过 `srt --settings <file> <command>` 包装命令，适合在受控启动时约束命令及其后代，不应当作为接管任意已运行桌面应用的基础。当前 Agent Guard 只探测 PATH 中的 `srt`，不自动安装、启动或接管它；CLI 适配器会在确认上游命令参数和生命周期后再实现。
 
 ## 分层
 
@@ -14,7 +14,8 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 2. GuardCore：可序列化配置与策略模型。目前的路径匹配仅用于配置预览。
 3. 网络执行器（待实现）：评估 Network Extension，对网络流量按应用身份执行策略。
 4. 文件执行器（待实现）：评估 Endpoint Security，对敏感文件打开请求做授权和记录。
-5. 可选内容检测（待研究）：需要明文接入点，不能从普通 HTTPS 报文直接判断密钥泄露。
+5. 可选受控启动适配（已留接口）：只针对 Agent Guard 启动的 CLI；桌面应用仍依赖系统级身份与网络执行器。
+6. 可选内容检测（待研究）：需要明文接入点，不能从普通 HTTPS 报文直接判断密钥泄露。
 
 网络连接与文件打开是不同事件。访问私钥不等于外泄，向服务器连接也不证明发送了敏感内容。界面必须保留这种区别。
 
