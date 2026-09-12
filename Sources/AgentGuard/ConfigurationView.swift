@@ -144,7 +144,10 @@ struct ConfigurationView: View {
             Text("配置与实际保护分开显示").font(.headline)
             capability("菜单栏与本地配置", detail: "可用", icon: "checkmark.circle")
             capability("应用网络监控与阻断", detail: "未接入 Network Extension", icon: "circle.dashed")
-            capability("敏感文件访问监控", detail: "未接入 Endpoint Security", icon: "circle.dashed")
+            capability("敏感文件访问监控", detail: store.endpointSecurityState.label, icon: "circle.dashed")
+            Text(store.endpointSecurityState.detail)
+                .foregroundStyle(.secondary).font(.caption)
+            Button("重新探测 Endpoint Security") { store.probeEndpointSecurity() }
             capability("HTTPS 敏感内容检查", detail: "未接入检查代理", icon: "circle.dashed")
             capability("受控启动隔离", detail: store.sandboxRuntimeStatus.label, icon: "circle.dashed")
             Text(store.sandboxRuntimeStatus.detail)

@@ -13,7 +13,7 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 1. SwiftUI：应用名单、敏感路径、策略、事件与保护状态。
 2. GuardCore：可序列化配置与策略模型。目前的路径匹配仅用于配置预览。
 3. 网络执行器（待实现）：评估 Network Extension，对网络流量按应用身份执行策略。
-4. 文件执行器（待实现）：评估 Endpoint Security，对敏感文件打开请求做授权和记录。
+4. 文件执行器（探测层已接入）：尝试建立 Endpoint Security 客户端，但当前不订阅事件、不响应授权请求。
 5. 可选受控启动适配（已留接口）：只针对 Agent Guard 启动的 CLI；桌面应用仍依赖系统级身份与网络执行器。
 6. 可选内容检测（待研究）：需要明文接入点，不能从普通 HTTPS 报文直接判断密钥泄露。
 
@@ -22,6 +22,7 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 ## 系统限制
 
 - Endpoint Security 需要 Apple 授权 entitlement、合适的签名与部署方式，以及用户授予的系统权限。Network Extension 的资格与权限独立评估。
+- 当前启动时只调用 `es_new_client` 做能力探测；失败原因会显示在能力状态页。成功也不等于已经保护文件，因为还没有订阅 `AUTH_OPEN` 或响应授权事件。
 - AUTH_OPEN 授权的是文件打开操作，不是每次读取的字节；应使用 flags 响应。FSEvents 不能代替文件读取授权。
 - 授权事件具有截止时间，不能无限等待用户点击。真实实现必须定义超时策略；若先拒绝再询问，允许只影响后续重试，不能声称恢复已经失败的系统调用。
 - 文件身份必须考虑符号链接、硬链接和重命名。当前字符串路径预览不能直接作为安全边界。

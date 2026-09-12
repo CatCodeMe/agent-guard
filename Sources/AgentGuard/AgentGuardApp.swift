@@ -23,7 +23,7 @@ private struct GuardMenu: View {
 
     var body: some View {
         Text("Agent Guard · 开发预览")
-        Text("监控未接入 · 尚未保护任何应用")
+        Text("文件后端：\(store.endpointSecurityState.label) · 尚未保护任何应用")
         Divider()
         Button("应用与文件规则…") {
             openWindow(id: "configuration")

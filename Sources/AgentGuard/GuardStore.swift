@@ -8,7 +8,9 @@ final class GuardStore: ObservableObject {
     @Published private(set) var configurationError: String?
     @Published private(set) var previewEvents: [PreviewEvent] = []
     @Published private(set) var sandboxRuntimeStatus = SandboxRuntimeProbe.current()
+    @Published private(set) var endpointSecurityState: EndpointSecurityState = .notStarted
     private var loadFailed = false
+    private let endpointSecurityBackend = EndpointSecurityBackend()
     let configurationURL: URL
 
     init(directory: URL? = nil) {
@@ -22,6 +24,7 @@ final class GuardStore: ObservableObject {
             loadFailed = true
             configurationError = error.localizedDescription
         }
+        probeEndpointSecurity()
     }
 
     var canEdit: Bool { !loadFailed }
@@ -86,6 +89,11 @@ final class GuardStore: ObservableObject {
 
     func refreshSandboxRuntimeStatus() {
         sandboxRuntimeStatus = SandboxRuntimeProbe.current()
+    }
+
+    func probeEndpointSecurity() {
+        endpointSecurityBackend.probe()
+        endpointSecurityState = endpointSecurityBackend.state
     }
 
     func addRule(_ rule: SensitivePathRule) {

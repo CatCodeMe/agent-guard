@@ -10,7 +10,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "GuardCore"),
-        .executableTarget(name: "AgentGuard", dependencies: ["GuardCore"]),
+        .executableTarget(
+            name: "AgentGuard",
+            dependencies: ["GuardCore"],
+            linkerSettings: [.linkedLibrary("EndpointSecurity")]
+        ),
         .testTarget(name: "GuardCoreTests", dependencies: ["GuardCore"]),
     ]
 )

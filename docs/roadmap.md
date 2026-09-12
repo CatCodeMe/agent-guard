@@ -8,7 +8,7 @@
 
 ## 1：运行时发现与平台可行性验证
 
-当前增量已加入 Codex、Claude、Cursor 的常见安装路径探测，以及 sandbox-runtime 的只读 PATH 探测。识别只生成配置，不启动进程，也不授予权限。
+当前增量已加入 Codex、Claude、Cursor 的常见安装路径探测，以及 sandbox-runtime 的只读 PATH 探测。识别只生成配置，不启动进程，也不授予权限；应用启动时会探测 Endpoint Security 客户端资格，但尚未订阅或阻止事件。
 
 下一步确认 Apple 开发者账号、Endpoint Security entitlement 与 Network Extension 签名部署条件。分别验证真实进程身份、文件打开通知、网络流识别。先记录，再接入授权。验证 CLI、桌面主进程及其辅助进程，避免仅凭进程名匹配。
 
