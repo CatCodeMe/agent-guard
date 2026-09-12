@@ -1,0 +1,23 @@
+# Local research and conversation artifacts are never published.
+/work/
+/outputs/
+/task_plan.md
+/findings.md
+/progress.md
+/.planning/
+
+# Build products and local state
+.DS_Store
+.build/
+.swiftpm/
+build/
+*.xcuserstate
+xcuserdata/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.mobileprovision
+node_modules/
+
