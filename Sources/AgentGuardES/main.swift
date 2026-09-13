@@ -90,7 +90,7 @@ do {
     exit(78)
 }
 
-let runtime = EnforcementRuntime(configuration: configuration, homeDirectory: options.homeDirectory)
+private let runtime = EnforcementRuntime(configuration: configuration, homeDirectory: options.homeDirectory)
 var client: OpaquePointer?
 let result = es_new_client(&client) { client, message in
     guard message.pointee.event_type == ES_EVENT_TYPE_AUTH_OPEN else {
