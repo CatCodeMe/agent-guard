@@ -204,7 +204,7 @@ struct ConfigurationView: View {
                 Button("复制应用路径") { store.copyCurrentApplicationPath() }
                     .help("将当前签名的 Agent Guard.app 路径复制到剪贴板")
             }
-            Text("真实启用步骤：使用已获 Endpoint Security entitlement 的签名包，点击上面的设置按钮，将当前 Agent Guard.app 拖入“完全磁盘访问”列表并打开开关，然后重新启动应用。当前本地 ad-hoc 包只能运行模拟通知，不能获得系统拦截权限。")
+            Text("真实启用分两层：Endpoint Security 客户端需要 Apple 授权的 entitlement、合适签名和 root 特权 LaunchDaemon；菜单栏应用本身只负责配置、通知和控制。特权 helper 还需要获得完全磁盘访问权限。当前本地 ad-hoc 包和直连 UI 后端只能运行模拟通知，不能获得系统拦截权限。")
                 .foregroundStyle(.secondary).font(.caption)
             HStack {
                 Button("重新探测 Endpoint Security") { store.probeEndpointSecurity() }

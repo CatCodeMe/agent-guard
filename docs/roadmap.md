@@ -10,9 +10,9 @@
 
 当前增量已加入 Codex、Claude、Cursor 的常见安装路径探测，以及 sandbox-runtime 的只读 PATH 探测。识别只生成配置，不启动进程，也不授予权限；应用启动时会建立 Endpoint Security 客户端并尝试订阅 `AUTH_OPEN`。真实事件只有在应用和路径双重匹配时才进入 `record / ask / block` 决策，通知测试链路仍可独立验收并明确标注为模拟事件。
 
-下一步确认 Apple 开发者账号、Endpoint Security entitlement 与 Network Extension 签名部署条件。用仓库内只读 probe 验证真实进程身份、文件打开通知和拒绝效果；验证 CLI、桌面主进程及其辅助进程，避免仅凭进程名匹配。网络仍保持独立，不把文件访问结果当成网络外泄证明。
+下一步确认 Apple 开发者账号、Endpoint Security entitlement 与 Network Extension 签名部署条件，并把 `AUTH_OPEN` 客户端从菜单栏进程拆成带 Apple entitlement 的 root LaunchDaemon，通过 IPC 传递配置、待决请求和审计结果。用仓库内只读 probe 验证真实进程身份、文件打开通知和拒绝效果；验证 CLI、桌面主进程及其辅助进程，避免仅凭进程名匹配。网络仍保持独立，不把文件访问结果当成网络外泄证明。
 
-验收：受控测试程序产生可关联的真实事件；缺失权限时清晰显示未启用；能力页能打开权限页面并指向当前签名 bundle；形成部署与权限文档。如果授权不可用，明确限制，不用模拟后端替代验收。Codex 验收必须同时记录实际应用或 helper 的进程路径。
+验收：root helper 在具备 entitlement/TCC 的签名环境中使受控测试程序产生可关联的真实事件；缺失 entitlement、root 部署或 TCC 时清晰显示未启用；能力页能打开权限页面并指向当前签名 bundle；形成部署与权限文档。如果授权不可用，明确限制，不用模拟后端替代验收。Codex 验收必须同时记录实际应用或 helper 的进程路径。
 
 ## 2：最小阻断闭环
 

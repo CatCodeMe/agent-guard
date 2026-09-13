@@ -2,7 +2,7 @@
 
 A macOS menu bar application for configuring application monitoring, sensitive-file rules, and user-controlled security decisions.
 
-**Early development.** The macOS binary now contains an `AUTH_OPEN` Endpoint Security enforcement path, but the default local build is ad-hoc signed and therefore cannot obtain Apple's Endpoint Security entitlement. Saving a rule alone is not proof of protection; the UI reports the runtime capability separately from configured policy.
+**Early development.** The macOS binary contains the policy and `AUTH_OPEN` enforcement seam, but the default local build is ad-hoc signed and the menu-bar process is not a root Endpoint Security client. A production implementation must move the ES client into a signed, Apple-entitled root LaunchDaemon and keep this app as the configuration/notification control plane. Saving a rule alone is not proof of protection; the UI reports the runtime capability separately from configured policy.
 
 ## Product direction
 
@@ -32,7 +32,7 @@ Click the shield in the menu bar and open the configuration window. Add applicat
 
 The notification uses the bundled Agent Guard shield icon. If macOS still shows the old generic icon after upgrading, quit Agent Guard completely and launch the newly built `.app` again so Notification Center reloads the bundle metadata.
 
-The real file path subscribes to `AUTH_OPEN` and only considers an event when both the executable and configured sensitive path match. `record` responds with allow and writes metadata; `ask` shows a notification and waits only until the Endpoint Security deadline; `block` responds with denied flags and shows a post-decision notification. Unmatched events are allowed without an audit entry. The default ad-hoc build reports the missing entitlement instead of pretending it is protecting files.
+The real file path subscribes to `AUTH_OPEN` and only considers an event when both the executable and configured sensitive path match. `record` responds with allow and writes metadata; `ask` shows a notification and waits only until the Endpoint Security deadline; `block` responds with denied flags and shows a post-decision notification. Unmatched events are allowed without an audit entry. The current prototype reports missing entitlement or missing root privilege instead of pretending it is protecting files; it is not yet the final daemon/GUI split.
 
 Configuration and metadata-only audit records are stored in `~/Library/Application Support/AgentGuard/configuration.json` and `audit.json`, respectively. Both files are written with a private directory and `0600` file mode, and audit history is bounded to 500 entries. File contents, raw paths from Endpoint Security events, and notification bodies are not persisted. For isolated development runs, set `AGENT_GUARD_DATA_DIR` when launching the executable.
 
@@ -45,9 +45,9 @@ printf 'agent-guard test\n' > /tmp/agent-guard-probe.txt
 
 Add `build/agent-guard-open-probe` as a protected CLI and `/tmp/agent-guard-probe.txt` as a blocked rule. A signed/approved Agent Guard build should make the probe return `Permission denied` or `Operation not permitted` and add an Endpoint Security event to the records tab. The helper only opens and reads one byte; it never creates or changes the target file.
 
-The build script accepts `CODE_SIGN_IDENTITY` for a real signed build and supplies `Resources/AgentGuard.entitlements`. That entitlement must be issued for the signing identity by Apple; the app must also be approved under **System Settings → Privacy & Security → Full Disk Access**. Without both, the expected state is “未启用”, not a failed policy decision.
+The build script accepts `CODE_SIGN_IDENTITY` for a real signed build and supplies `Resources/AgentGuard.entitlements`. That entitlement must be issued for the signing identity by Apple. The future root helper must also be approved under **System Settings → Privacy & Security → Full Disk Access**. Without the Apple entitlement, a valid signed helper, root deployment, and TCC approval, the expected state is “未启用”, not a failed policy decision. See [macOS entitlement and privileged-helper setup](docs/macos-entitlement.md).
 
-The **能力状态** tab has buttons for opening the Full Disk Access page, revealing the current `Agent Guard.app` in Finder, and copying its path. Add the exact signed app bundle to the system list, enable it, quit and relaunch Agent Guard, then click **重新探测 Endpoint Security**. The app cannot add itself to the protected list silently; macOS requires the user to confirm the bundle in System Settings.
+The **能力状态** tab has buttons for opening the Full Disk Access page, revealing the current `Agent Guard.app` in Finder, and copying its path. The buttons are useful for the control-plane app during development; the production permission entry must point to the exact signed privileged helper or its approved bundle. The app cannot add itself to the protected list silently; macOS requires the user to confirm the bundle in System Settings.
 
 To test Codex specifically, first add the Codex `.app` from **应用** and add a temporary test file rule with `询问我` or `阻止`. Ask Codex to perform an operation that opens that exact file. A real event appears in **记录** with `Endpoint Security` as its source and the actual application name. If the state is still “未启用”, or no event appears, test the controlled probe above first; if that works, add the executable helper that Codex actually uses when it lives outside the `.app/Contents/` directory.
 

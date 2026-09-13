@@ -13,7 +13,7 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 1. SwiftUI：应用名单、敏感路径、策略、事件与保护状态；本地通知负责把待决事件交给用户。
 2. GuardCore：可序列化配置与策略模型。目前的路径匹配仅用于配置预览。
 3. 网络执行器（待实现）：评估 Network Extension，对网络流量按应用身份执行策略。
-4. 文件执行器（最小真实闭环已接入）：建立 Endpoint Security 客户端并订阅 `AUTH_OPEN`。只有可执行文件与重点路径同时匹配时才生成审计事件；`record` 放行，`ask` 在内核 deadline 内等待通知动作，`block` 以 flags=0 拒绝。未匹配的事件以 `UInt32.max` 放行，不把整台机器变成默认阻断器。
+4. 文件执行器（原型 seam 已接入）：建立 Endpoint Security 客户端并订阅 `AUTH_OPEN`。只有可执行文件与重点路径同时匹配时才生成审计事件；`record` 放行，`ask` 在内核 deadline 内等待通知动作，`block` 以 flags=0 拒绝。未匹配的事件以 `UInt32.max` 放行，不把整台机器变成默认阻断器。当前代码仍由菜单栏进程直连，仅用于验证策略和错误状态；真实部署必须把这一层移到带 Apple entitlement 的 root LaunchDaemon，再通过 IPC 回传决定请求给 UI。
 5. 可选受控启动适配（已留接口）：只针对 Agent Guard 启动的 CLI；桌面应用仍依赖系统级身份与网络执行器。
 6. 可选内容检测（待研究）：需要明文接入点，不能从普通 HTTPS 报文直接判断密钥泄露。
 
@@ -21,8 +21,8 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 
 ## 系统限制
 
-- Endpoint Security 需要 Apple 授权 entitlement、合适的签名与部署方式，以及用户授予的系统权限。Network Extension 的资格与权限独立评估。
-- 启动时会调用 `es_new_client` 并尝试订阅 `AUTH_OPEN`；失败原因会显示在能力状态页。默认 ad-hoc 开发包会因为 entitlement 或 TCC 不足而显示未启用。只有具备 Apple 授权 entitlement、合适签名并获完全磁盘访问权限时，系统才会交付可拦截事件。
+- Endpoint Security 需要 Apple 授权 entitlement、合适的签名、root 特权部署方式，以及用户授予的系统权限。Network Extension 的资格与权限独立评估。
+- 启动时原型会调用 `es_new_client` 并尝试订阅 `AUTH_OPEN`；失败原因会显示在能力状态页。普通菜单栏进程会返回 `ES_NEW_CLIENT_RESULT_ERR_NOT_PRIVILEGED`，ad-hoc 包还会缺少受限 entitlement。生产版应由 root LaunchDaemon 调用 `es_new_client`，再由菜单栏应用通过 IPC 处理配置和用户决定。
 - AUTH_OPEN 授权的是文件打开操作，不是每次读取的字节；应使用 flags 响应。FSEvents 不能代替文件读取授权。
 - 授权事件具有截止时间，不能无限等待用户点击。真实实现必须定义超时策略；若先拒绝再询问，允许只影响后续重试，不能声称恢复已经失败的系统调用。
 - 文件身份必须考虑符号链接、硬链接和重命名。当前首版使用 Endpoint Security 提供的绝对路径和保守的标准化匹配；这已经能做受控测试，但还不是 inode/file-id 级别的不可绕过身份。
@@ -32,7 +32,7 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 
 ## 当前状态
 
-当前代码实现本地配置、模拟策略预览、本地通知测试和最小的真实 `AUTH_OPEN` 执行器。点击规则旁的“测试通知”会生成一条明确标注的模拟事件；用户选择允许一次、阻止或打开应用后，事件状态会持久化到审计记录。真实事件只保存规则、应用、动作和结果；不读取或保存文件内容。网络仍未接入 Network Extension，默认 ad-hoc 包也不会宣称已经保护文件。
+当前代码实现本地配置、模拟策略预览、本地通知测试和原型 `AUTH_OPEN` 执行器。点击规则旁的“测试通知”会生成一条明确标注的模拟事件；用户选择允许一次、阻止或打开应用后，事件状态会持久化到审计记录。真实事件只保存规则、应用、动作和结果；不读取或保存文件内容。网络仍未接入 Network Extension，默认 ad-hoc 包和非 root 菜单栏进程也不会宣称已经保护文件。
 
 应用包现在带有独立的 `AppIcon.icns`，本地通知会使用 Agent Guard 图标；系统设置引导位于“能力状态”页。引导只负责打开 Full Disk Access 页面、在 Finder 中定位当前 bundle 和复制路径，用户仍需把正确的已签名 `.app` 拖入系统列表并打开开关。真实 Codex 验收先用受控 `agent-guard-open-probe` 验证授权链路，再让 Codex 打开同一个临时文件；若 Codex 的 helper 位于 `.app` 外部，需要把实际 helper 单独加入应用名单。
 

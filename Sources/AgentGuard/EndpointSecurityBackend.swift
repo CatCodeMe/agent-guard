@@ -329,7 +329,7 @@ final class EndpointSecurityBackend: ObservableObject {
         case ES_NEW_CLIENT_RESULT_ERR_NOT_PERMITTED:
             "系统未授予 Endpoint Security 权限，请将签名后的应用加入完全磁盘访问权限"
         case ES_NEW_CLIENT_RESULT_ERR_NOT_PRIVILEGED:
-            "需要受支持的特权部署方式"
+            "Endpoint Security 客户端必须运行在 root 特权 helper/LaunchDaemon 中；当前菜单栏应用不能直接订阅"
         case ES_NEW_CLIENT_RESULT_ERR_TOO_MANY_CLIENTS:
             "系统中的 Endpoint Security 客户端数量已达上限"
         default:
