@@ -159,7 +159,10 @@ public enum ConfigurationFile {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         // The application directory is private; restrict the final configuration file as well.
-        try encoder.encode(value).write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
+        // File protection options are intended for iOS data-protection classes and can
+        // make a development macOS app unable to reopen its own configuration. The
+        // private directory plus 0600 file mode provide the local boundary here.
+        try encoder.encode(value).write(to: url, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }

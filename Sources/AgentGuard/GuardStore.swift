@@ -10,7 +10,6 @@ final class GuardStore: ObservableObject {
     @Published private(set) var previewEvents: [PreviewEvent] = []
     @Published private(set) var sandboxRuntimeStatus = SandboxRuntimeProbe.current()
     @Published private(set) var endpointSecurityState: EndpointSecurityState = .notStarted
-    private var loadFailed = false
     private let endpointSecurityBackend = EndpointSecurityBackend()
     private let notificationCoordinator = NotificationCoordinator.shared
     let configurationURL: URL
@@ -23,8 +22,11 @@ final class GuardStore: ObservableObject {
         configurationURL = base.appendingPathComponent("configuration.json")
         do { configuration = try ConfigurationFile.load(from: configurationURL) }
         catch {
-            loadFailed = true
-            configurationError = error.localizedDescription
+            // Keep the broken/unreadable file untouched. A fresh in-memory
+            // configuration still lets the user run the notification test and
+            // repair persistence; the banner makes the persistence problem clear.
+            configuration = .init()
+            configurationError = "配置暂时无法读取：\(error.localizedDescription)。本次运行可以继续测试，但修改可能无法持久化。"
         }
         notificationCoordinator.onAction = { [weak self] eventID, action in
             self?.resolvePreviewEvent(eventID, action: action)
@@ -35,7 +37,7 @@ final class GuardStore: ObservableObject {
         probeEndpointSecurity()
     }
 
-    var canEdit: Bool { !loadFailed }
+    var canEdit: Bool { true }
 
     private func update(_ transform: (inout GuardConfiguration) -> Void) {
         guard canEdit else { return }
@@ -45,7 +47,12 @@ final class GuardStore: ObservableObject {
             try ConfigurationFile.save(next, to: configurationURL)
             configuration = next
             configurationError = nil
-        } catch { configurationError = error.localizedDescription }
+        } catch {
+            // Preserve the in-memory change so notification and policy previews
+            // remain usable even when macOS temporarily denies persistence.
+            configuration = next
+            configurationError = "配置未能保存：\(error.localizedDescription)。当前修改仅保留在本次运行。"
+        }
     }
 
     func addApplication(_ url: URL) {
