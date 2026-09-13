@@ -10,6 +10,14 @@ public enum RuleAction: String, Codable, CaseIterable, Sendable {
         case .block: "阻止"
         }
     }
+
+    public var iconName: String {
+        switch self {
+        case .record: "eye"
+        case .ask: "questionmark.circle"
+        case .block: "hand.raised"
+        }
+    }
 }
 
 public enum AgentKind: String, Codable, CaseIterable, Sendable {
@@ -72,7 +80,8 @@ public struct SensitivePathRule: Identifiable, Codable, Equatable, Sendable {
         self.enabled = enabled
     }
 
-    /// Configuration preview only. Does not resolve symlinks, open files or authorize OS events.
+    /// Shared conservative path matcher. It only compares normalized strings;
+    /// it never opens files, resolves symlinks, or authorizes OS events itself.
     public func matches(path candidate: String, homeDirectory: String) -> Bool {
         guard enabled,
               let target = Self.normalized(path, homeDirectory: homeDirectory),

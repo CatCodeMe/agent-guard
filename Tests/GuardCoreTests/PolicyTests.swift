@@ -100,4 +100,40 @@ final class PolicyTests: XCTestCase {
             ["--settings", "/tmp/guard settings.json", "/bin/echo", "$HOME", "a; echo unsafe"]
         )
     }
+
+    func testAuditStatisticsSeparateConfiguredActionFromOutcome() {
+        let events = [
+            AuditEvent(source: .simulation, ruleName: "SSH", configuredAction: .ask, outcome: .blocked),
+            AuditEvent(source: .endpointSecurity, ruleName: "AWS", configuredAction: .record, outcome: .recorded),
+            AuditEvent(source: .simulation, ruleName: "SSH", configuredAction: .ask, outcome: .allowedOnce),
+            AuditEvent(source: .simulation, ruleName: "SSH", configuredAction: .ask, outcome: .pending),
+        ]
+        let statistics = AuditStatistics(events: events)
+        XCTAssertEqual(statistics.total, 4)
+        XCTAssertEqual(statistics.blocked, 1)
+        XCTAssertEqual(statistics.allowedOnce, 1)
+        XCTAssertEqual(statistics.recorded, 1)
+        XCTAssertEqual(statistics.pending, 1)
+    }
+
+    func testAuditFileRoundTripIsBoundedAndPrivate() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("audit.json")
+        let events = (0..<(AuditFile.maxEventCount + 7)).map { index in
+            AuditEvent(
+                date: Date(timeIntervalSince1970: TimeInterval(index)),
+                source: .simulation,
+                ruleName: "Rule \(index)",
+                configuredAction: .record,
+                outcome: .recorded
+            )
+        }
+        try AuditFile.save(events, to: url)
+        let loaded = try AuditFile.load(from: url)
+        XCTAssertEqual(loaded.count, AuditFile.maxEventCount)
+        XCTAssertEqual(loaded.first?.ruleName, "Rule \(AuditFile.maxEventCount + 6)")
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+    }
 }

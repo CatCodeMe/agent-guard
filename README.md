@@ -2,7 +2,7 @@
 
 A macOS menu bar application for configuring application monitoring, sensitive-file rules, and user-controlled security decisions.
 
-**Early development. No network or file-access enforcement is active yet.** Saving a rule does not protect a process. This repository will report runtime coverage separately from configured policy.
+**Early development.** The macOS binary now contains an `AUTH_OPEN` Endpoint Security enforcement path, but the default local build is ad-hoc signed and therefore cannot obtain Apple's Endpoint Security entitlement. Saving a rule alone is not proof of protection; the UI reports the runtime capability separately from configured policy.
 
 ## Product direction
 
@@ -28,10 +28,21 @@ bash scripts/build-app.sh
 open "build/Agent Guard.app"
 ```
 
-Click the shield in the menu bar and open the configuration window. Add applications and sensitive paths, then click **测试通知** beside a rule. The first test asks macOS for notification permission; the resulting notification has **允许一次**, **阻止**, and **打开 Agent Guard** actions. Choosing an action updates the in-memory event record. This is a safe end-to-end notification test: it does not read, write, or block the selected file.
+Click the shield in the menu bar and open the configuration window. Add applications and sensitive paths, then click **测试通知** beside a rule. The first test asks macOS for notification permission; the resulting notification has **允许一次**, **阻止**, and **打开 Agent Guard** actions. Choosing an action updates the audit record. This is a safe end-to-end notification test: it does not read, write, or block the selected file.
 
-The notification test is deliberately separate from real enforcement. The current Endpoint Security integration only probes whether a client can be created; it does not subscribe to file events or block a system call. A real protection acceptance test therefore starts only after the required Apple entitlement, signing, and system permission are available.
+The real file path subscribes to `AUTH_OPEN` and only considers an event when both the executable and configured sensitive path match. `record` responds with allow and writes metadata; `ask` shows a notification and waits only until the Endpoint Security deadline; `block` responds with denied flags and shows a post-decision notification. Unmatched events are allowed without an audit entry. The default ad-hoc build reports the missing entitlement instead of pretending it is protecting files.
 
-Configuration is stored in `~/Library/Application Support/AgentGuard/configuration.json`. For isolated development runs, set `AGENT_GUARD_DATA_DIR` when launching the executable. The build script creates an ad-hoc signed local development app; it does not install privileged services or produce a notarized distribution.
+Configuration and metadata-only audit records are stored in `~/Library/Application Support/AgentGuard/configuration.json` and `audit.json`, respectively. Both files are written with a private directory and `0600` file mode, and audit history is bounded to 500 entries. File contents, raw paths from Endpoint Security events, and notification bodies are not persisted. For isolated development runs, set `AGENT_GUARD_DATA_DIR` when launching the executable.
+
+To build a controlled read-only probe for a real entitlement acceptance test:
+
+```sh
+bash scripts/build-open-probe.sh
+printf 'agent-guard test\n' > /tmp/agent-guard-probe.txt
+```
+
+Add `build/agent-guard-open-probe` as a protected CLI and `/tmp/agent-guard-probe.txt` as a blocked rule. A signed/approved Agent Guard build should make the probe return `Permission denied` or `Operation not permitted` and add an Endpoint Security event to the records tab. The helper only opens and reads one byte; it never creates or changes the target file.
+
+The build script accepts `CODE_SIGN_IDENTITY` for a real signed build and supplies `Resources/AgentGuard.entitlements`. That entitlement must be issued for the signing identity by Apple; the app must also be approved under **System Settings → Privacy & Security → Full Disk Access**. Without both, the expected state is “未启用”, not a failed policy decision.
 
 See the [architecture and limitations](docs/architecture.md) and [implementation milestones](docs/roadmap.md).

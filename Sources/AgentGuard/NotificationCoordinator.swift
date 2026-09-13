@@ -8,6 +8,20 @@ enum NotificationAction: String, Sendable {
     case open = "AG_OPEN"
 }
 
+struct GuardNotificationEvent: Sendable {
+    let id: UUID
+    let title: String
+    let body: String
+    let categoryIdentifier: String
+
+    init(id: UUID, title: String, body: String, categoryIdentifier: String) {
+        self.id = id
+        self.title = title
+        self.body = body
+        self.categoryIdentifier = categoryIdentifier
+    }
+}
+
 /// Owns local notification categories and forwards user actions to the main store.
 /// Notification text intentionally contains a rule name, not the sensitive path.
 @MainActor
@@ -45,10 +59,53 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
                 intentIdentifiers: [],
                 options: []
             ),
+            UNNotificationCategory(
+                identifier: "AG_BLOCKED_EVENT",
+                actions: [
+                    UNNotificationAction(
+                        identifier: NotificationAction.open.rawValue,
+                        title: "打开 Agent Guard",
+                        options: [.foreground]
+                    ),
+                ],
+                intentIdentifiers: [],
+                options: []
+            ),
         ])
     }
 
     func sendTestEvent(id: UUID, ruleName: String, configuredAction: String) {
+        send(
+            GuardNotificationEvent(
+                id: id,
+                title: "Agent Guard 测试事件",
+                body: "规则：\(ruleName) · 配置动作：\(configuredAction)\n这是模拟事件，不会访问或阻止文件。",
+                categoryIdentifier: "AG_PREVIEW_EVENT"
+            )
+        )
+    }
+
+    func sendDecisionEvent(
+        id: UUID,
+        ruleName: String,
+        configuredAction: String,
+        applicationName: String?,
+        requiresUserDecision: Bool
+    ) {
+        let app = applicationName.map { " · 应用：\($0)" } ?? ""
+        send(
+            GuardNotificationEvent(
+                id: id,
+                title: "Agent Guard 文件访问",
+                body: requiresUserDecision
+                    ? "规则：\(ruleName) · 配置动作：\(configuredAction)\(app)\n请在授权期限内选择允许一次或阻止。"
+                    : "规则：\(ruleName) · 配置动作：\(configuredAction)\(app)\n这次访问已阻止，可打开 Agent Guard 调整规则。",
+                categoryIdentifier: requiresUserDecision ? "AG_PREVIEW_EVENT" : "AG_BLOCKED_EVENT"
+            )
+        )
+    }
+
+    private func send(_ event: GuardNotificationEvent) {
         let center = self.center
         let onError = self.onError
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
@@ -62,12 +119,12 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
             }
 
             let content = UNMutableNotificationContent()
-            content.title = "Agent Guard 测试事件"
-            content.body = "规则：\(ruleName) · 配置动作：\(configuredAction)\n这是模拟事件，不会访问或阻止文件。"
+            content.title = event.title
+            content.body = event.body
             content.sound = .default
-            content.categoryIdentifier = "AG_PREVIEW_EVENT"
+            content.categoryIdentifier = event.categoryIdentifier
             let request = UNNotificationRequest(
-                identifier: id.uuidString,
+                identifier: event.id.uuidString,
                 content: content,
                 trigger: nil
             )

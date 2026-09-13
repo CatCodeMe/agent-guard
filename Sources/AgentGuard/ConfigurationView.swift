@@ -22,7 +22,7 @@ struct ConfigurationView: View {
                     .background(.quaternary, in: Capsule())
             }.padding(24)
 
-            Label("真实文件与网络监控尚未接入；现在可以用本地通知测试完整的用户决策流程。",
+            Label("文件访问后端已接入 AUTH_OPEN；是否能真正拦截取决于 Endpoint Security entitlement、签名和完全磁盘访问权限。现在仍可先用本地通知测试用户决策流程。",
                   systemImage: "info.circle")
                 .font(.callout).foregroundStyle(.secondary)
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -34,6 +34,10 @@ struct ConfigurationView: View {
             }
             if let error = store.notificationError {
                 Label(error, systemImage: "bell.badge")
+                    .foregroundStyle(.orange).padding(.horizontal, 24).padding(.top, 8)
+            }
+            if let error = store.auditError {
+                Label(error, systemImage: "externaldrive.badge.exclamationmark")
                     .foregroundStyle(.orange).padding(.horizontal, 24).padding(.top, 8)
             }
 
@@ -70,7 +74,7 @@ struct ConfigurationView: View {
                                 .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                         }
                         Spacer()
-                        Text("待接入").font(.caption).foregroundStyle(.secondary)
+                        Text("保护候选").font(.caption).foregroundStyle(.secondary)
                         Button { store.removeApplication(app.id) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless).help("从配置中移除，不会删除应用").disabled(!store.canEdit)
                     }.padding(.vertical, 5)
@@ -103,6 +107,8 @@ struct ConfigurationView: View {
                                 .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                         }
                         Spacer()
+                        Label(rule.action.label, systemImage: rule.action.iconName)
+                            .font(.caption).foregroundStyle(actionColor(rule.action))
                         Picker("处理方式", selection: Binding(
                             get: { rule.action }, set: { store.changeAction(rule.id, to: $0) }
                         )) {
@@ -115,27 +121,37 @@ struct ConfigurationView: View {
                     }.padding(.vertical, 5)
                 }.listStyle(.inset)
             }
-            Text("“测试通知”只验证通知和用户选择；真实的文件拦截仍需 Endpoint Security 事件后端。")
+            Text("“测试通知”不会访问文件；真实拦截只对同时匹配受保护应用和重点文件的 AUTH_OPEN 事件生效。开发包若显示未启用，请先使用具备 entitlement 的签名包并授予完全磁盘访问权限。")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(14)
     }
 
     private var events: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("通知测试记录").font(.headline)
-            Text("目前仅显示本次运行中的测试事件。通知中的操作会回写到这里；不会采集真实应用活动或执行文件操作。")
+            Text("记录与统计").font(.headline)
+            Text("记录只保存规则、应用、动作和结果，不保存文件内容或通知正文。测试事件与真实 Endpoint Security 事件会分开标记。")
                 .font(.callout).foregroundStyle(.secondary)
-            if store.previewEvents.isEmpty {
+            HStack(spacing: 10) {
+                statCard("全部", value: store.auditStatistics.total, icon: "list.bullet.rectangle")
+                statCard("已阻止", value: store.auditStatistics.blocked + store.auditStatistics.timedOut, icon: "hand.raised.fill")
+                statCard("已允许", value: store.auditStatistics.allowedOnce, icon: "checkmark.circle.fill")
+                statCard("仅记录", value: store.auditStatistics.recorded, icon: "eye")
+            }
+            if store.auditEvents.isEmpty {
                 empty("没有记录", detail: "在重点文件中点“测试通知”，然后在通知栏选择一个操作。", icon: "clock")
             } else {
-                List(store.previewEvents) { event in
+                List(store.auditEvents) { event in
                     HStack {
-                        Image(systemName: event.resolution == .pending ? "bell" : "checkmark.circle")
-                            .foregroundStyle(event.resolution == .pending ? .indigo : .green)
+                        Image(systemName: event.outcome.iconName)
+                            .foregroundStyle(outcomeColor(event.outcome))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.ruleName)
-                            Text("模拟事件 · 配置动作：\(event.action) · \(event.resolution.label)")
+                            Text("\(event.source.label) · \(event.kind.label) · 配置动作：\(event.configuredAction.label) · \(event.outcome.label)")
                                 .font(.caption).foregroundStyle(.secondary)
+                            if let applicationName = event.applicationName {
+                                Text("应用：\(applicationName)")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         Text(event.date, style: .time).font(.caption).foregroundStyle(.secondary)
@@ -145,13 +161,41 @@ struct ConfigurationView: View {
         }.padding(14)
     }
 
+    private func statCard(_ title: String, value: Int, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
+            Text("\(value)").font(.title3.bold())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func outcomeColor(_ outcome: AuditOutcome) -> Color {
+        switch outcome {
+        case .pending: .indigo
+        case .recorded: .secondary
+        case .allowedOnce: .green
+        case .blocked, .timedOut: .red
+        case .opened: .orange
+        }
+    }
+
+    private func actionColor(_ action: RuleAction) -> Color {
+        switch action {
+        case .record: .secondary
+        case .ask: .orange
+        case .block: .red
+        }
+    }
+
     private var capabilities: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("配置与实际保护分开显示").font(.headline)
             capability("菜单栏与本地配置", detail: "可用", icon: "checkmark.circle")
             capability("macOS 本地通知测试", detail: "可用", icon: "bell.badge")
             capability("应用网络监控与阻断", detail: "未接入 Network Extension", icon: "circle.dashed")
-            capability("敏感文件访问监控", detail: store.endpointSecurityState.label, icon: "circle.dashed")
+            capability("敏感文件访问监控", detail: store.endpointSecurityState.label, icon: store.endpointSecurityState == .available ? "checkmark.shield" : "circle.dashed")
             Text(store.endpointSecurityState.detail)
                 .foregroundStyle(.secondary).font(.caption)
             Button("重新探测 Endpoint Security") { store.probeEndpointSecurity() }
@@ -161,7 +205,7 @@ struct ConfigurationView: View {
                 .foregroundStyle(.secondary).font(.caption)
             Button("重新检测可选后端") { store.refreshSandboxRuntimeStatus() }
             Divider()
-            Text("配置保存在本机，不上传云端。读取私钥与发送私钥是两类独立事件。")
+            Text("配置和审计记录保存在本机，不上传云端。读取敏感文件与把内容发送到网络是两类独立事件。")
                 .foregroundStyle(.secondary).font(.callout)
             Spacer()
         }.padding(18)

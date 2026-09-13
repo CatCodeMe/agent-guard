@@ -6,13 +6,15 @@ import GuardCore
 final class GuardStore: ObservableObject {
     @Published private(set) var configuration = GuardConfiguration()
     @Published private(set) var configurationError: String?
+    @Published private(set) var auditError: String?
     @Published private(set) var notificationError: String?
-    @Published private(set) var previewEvents: [PreviewEvent] = []
+    @Published private(set) var auditEvents: [AuditEvent] = []
     @Published private(set) var sandboxRuntimeStatus = SandboxRuntimeProbe.current()
     @Published private(set) var endpointSecurityState: EndpointSecurityState = .notStarted
     private let endpointSecurityBackend = EndpointSecurityBackend()
     private let notificationCoordinator = NotificationCoordinator.shared
     let configurationURL: URL
+    let auditURL: URL
 
     init(directory: URL? = nil) {
         let override = ProcessInfo.processInfo.environment["AGENT_GUARD_DATA_DIR"]
@@ -20,6 +22,7 @@ final class GuardStore: ObservableObject {
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("AgentGuard", isDirectory: true)
         configurationURL = base.appendingPathComponent("configuration.json")
+        auditURL = base.appendingPathComponent("audit.json")
         do { configuration = try ConfigurationFile.load(from: configurationURL) }
         catch {
             // Keep the broken/unreadable file untouched. A fresh in-memory
@@ -28,8 +31,19 @@ final class GuardStore: ObservableObject {
             configuration = .init()
             configurationError = "配置暂时无法读取：\(error.localizedDescription)。本次运行可以继续测试，但修改可能无法持久化。"
         }
+        do { auditEvents = try AuditFile.load(from: auditURL) }
+        catch {
+            auditError = "审计记录暂时无法读取：\(error.localizedDescription)。新的记录仍会保留在本次运行中。"
+        }
+        endpointSecurityBackend.onMatched = { [weak self] request in
+            self?.handleEndpointMatch(request)
+        }
+        endpointSecurityBackend.onDecision = { [weak self] decision in
+            self?.handleEndpointDecision(decision)
+        }
+        endpointSecurityBackend.updateConfiguration(configuration)
         notificationCoordinator.onAction = { [weak self] eventID, action in
-            self?.resolvePreviewEvent(eventID, action: action)
+            self?.resolveNotification(eventID, action: action)
         }
         notificationCoordinator.onError = { [weak self] message in
             self?.notificationError = message
@@ -46,11 +60,13 @@ final class GuardStore: ObservableObject {
         do {
             try ConfigurationFile.save(next, to: configurationURL)
             configuration = next
+            endpointSecurityBackend.updateConfiguration(next)
             configurationError = nil
         } catch {
             // Preserve the in-memory change so notification and policy previews
             // remain usable even when macOS temporarily denies persistence.
             configuration = next
+            endpointSecurityBackend.updateConfiguration(next)
             configurationError = "配置未能保存：\(error.localizedDescription)。当前修改仅保留在本次运行。"
         }
     }
@@ -146,47 +162,103 @@ final class GuardStore: ObservableObject {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let decision = PolicyPreview.evaluate(path: rule.path, rules: configuration.rules, homeDirectory: home)
         let eventID = UUID()
-        let action = decision?.action.label ?? "没有启用的匹配规则"
-        previewEvents.insert(.init(id: eventID, date: Date(), ruleName: rule.name, action: action), at: 0)
-        previewEvents = Array(previewEvents.prefix(50))
+        let configuredAction = decision?.action ?? rule.action
+        appendAudit(.init(
+            id: eventID,
+            source: .simulation,
+            kind: .fileOpen,
+            ruleName: rule.name,
+            configuredAction: configuredAction
+        ))
         notificationError = nil
-        notificationCoordinator.sendTestEvent(id: eventID, ruleName: rule.name, configuredAction: action)
+        notificationCoordinator.sendTestEvent(
+            id: eventID,
+            ruleName: rule.name,
+            configuredAction: configuredAction.label
+        )
     }
 
-    private func resolvePreviewEvent(_ id: UUID, action: NotificationAction) {
-        guard let index = previewEvents.firstIndex(where: { $0.id == id }) else { return }
-        previewEvents[index].resolution = PreviewResolution(action)
-    }
-}
+    var auditStatistics: AuditStatistics { AuditStatistics(events: auditEvents) }
 
-enum PreviewResolution: String {
-    case pending
-    case allowedOnce
-    case blocked
-    case opened
-
-    init(_ action: NotificationAction) {
-        switch action {
-        case .allowOnce: self = .allowedOnce
-        case .block: self = .blocked
-        case .open: self = .opened
+    private func appendAudit(_ event: AuditEvent) {
+        auditEvents.insert(event, at: 0)
+        auditEvents = Array(auditEvents.prefix(AuditFile.maxEventCount))
+        do {
+            try AuditFile.save(auditEvents, to: auditURL)
+            auditError = nil
+        } catch {
+            auditError = "审计记录未能保存：\(error.localizedDescription)。当前记录仅保留在本次运行。"
         }
     }
 
-    var label: String {
-        switch self {
-        case .pending: return "等待用户操作"
-        case .allowedOnce: return "用户选择允许一次"
-        case .blocked: return "用户选择阻止"
-        case .opened: return "用户打开 Agent Guard"
+    private func resolveNotification(_ id: UUID, action: NotificationAction) {
+        guard let index = auditEvents.firstIndex(where: { $0.id == id }) else { return }
+        if auditEvents[index].source == .endpointSecurity {
+            switch action {
+            case .allowOnce, .block:
+                // A live AUTH_OPEN event owns the decision. Ignore stale taps
+                // after its deadline so the audit log cannot claim that a file
+                // was allowed after the kernel already denied it.
+                _ = endpointSecurityBackend.resolveNotification(id, action: action)
+                return
+            case .open:
+                auditEvents[index].outcome = .opened
+            }
+        } else {
+            switch action {
+            case .allowOnce: auditEvents[index].outcome = .allowedOnce
+            case .block: auditEvents[index].outcome = .blocked
+            case .open: auditEvents[index].outcome = .opened
+            }
+        }
+        do {
+            try AuditFile.save(auditEvents, to: auditURL)
+            auditError = nil
+        } catch {
+            auditError = "审计记录未能保存：\(error.localizedDescription)。当前结果仅保留在本次运行。"
         }
     }
-}
 
-struct PreviewEvent: Identifiable {
-    let id: UUID
-    let date: Date
-    let ruleName: String
-    let action: String
-    var resolution: PreviewResolution = .pending
+    private func handleEndpointMatch(_ request: EndpointSecurityRequest) {
+        appendAudit(.init(
+            id: request.id,
+            source: .endpointSecurity,
+            kind: .fileOpen,
+            ruleName: request.ruleName,
+            applicationName: request.applicationName,
+            configuredAction: request.configuredAction
+        ))
+        if request.configuredAction == .ask || request.configuredAction == .block {
+            notificationError = nil
+            notificationCoordinator.sendDecisionEvent(
+                id: request.id,
+                ruleName: request.ruleName,
+                configuredAction: request.configuredAction.label,
+                applicationName: request.applicationName,
+                requiresUserDecision: request.configuredAction == .ask
+            )
+        }
+    }
+
+    private func handleEndpointDecision(_ decision: EndpointSecurityDecision) {
+        guard let index = auditEvents.firstIndex(where: { $0.id == decision.request.id }) else {
+            appendAudit(.init(
+                id: decision.request.id,
+                source: .endpointSecurity,
+                kind: .fileOpen,
+                ruleName: decision.request.ruleName,
+                applicationName: decision.request.applicationName,
+                configuredAction: decision.request.configuredAction,
+                outcome: decision.outcome
+            ))
+            return
+        }
+        auditEvents[index].outcome = decision.outcome
+        do {
+            try AuditFile.save(auditEvents, to: auditURL)
+            auditError = nil
+        } catch {
+            auditError = "审计记录未能保存：\(error.localizedDescription)。当前结果仅保留在本次运行。"
+        }
+    }
 }
