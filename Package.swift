@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "GuardCore", targets: ["GuardCore"]),
         .executable(name: "AgentGuard", targets: ["AgentGuard"]),
+        .executable(name: "AgentGuardES", targets: ["AgentGuardES"]),
     ],
     targets: [
         .target(name: "GuardCore"),
@@ -17,6 +18,11 @@ let package = Package(
                 .linkedLibrary("EndpointSecurity"),
                 .linkedFramework("UserNotifications"),
             ]
+        ),
+        .executableTarget(
+            name: "AgentGuardES",
+            dependencies: ["GuardCore"],
+            linkerSettings: [.linkedLibrary("EndpointSecurity")]
         ),
         .testTarget(name: "GuardCoreTests", dependencies: ["GuardCore"]),
     ]

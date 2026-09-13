@@ -2,7 +2,7 @@
 
 A macOS menu bar application for configuring application monitoring, sensitive-file rules, and user-controlled security decisions.
 
-**Early development.** The macOS binary contains the policy and `AUTH_OPEN` enforcement seam, but the default local build is ad-hoc signed and the menu-bar process is not a root Endpoint Security client. A production implementation must move the ES client into a signed, Apple-entitled root LaunchDaemon and keep this app as the configuration/notification control plane. Saving a rule alone is not proof of protection; the UI reports the runtime capability separately from configured policy.
+**Early development.** The macOS project contains the policy and a standalone `AgentGuardES` `AUTH_OPEN` enforcement seam, but the default local build is ad-hoc signed and the menu-bar process is not a root Endpoint Security client. A production implementation must install the helper as a signed, Apple-entitled root LaunchDaemon and keep this app as the configuration/notification control plane. Saving a rule alone is not proof of protection; the UI reports the runtime capability separately from configured policy.
 
 ## Product direction
 
@@ -46,6 +46,8 @@ printf 'agent-guard test\n' > /tmp/agent-guard-probe.txt
 Add `build/agent-guard-open-probe` as a protected CLI and `/tmp/agent-guard-probe.txt` as a blocked rule. A signed/approved Agent Guard build should make the probe return `Permission denied` or `Operation not permitted` and add an Endpoint Security event to the records tab. The helper only opens and reads one byte; it never creates or changes the target file.
 
 The build script accepts `CODE_SIGN_IDENTITY` for a real signed build and supplies `Resources/AgentGuard.entitlements`. That entitlement must be issued for the signing identity by Apple. The future root helper must also be approved under **System Settings → Privacy & Security → Full Disk Access**. Without the Apple entitlement, a valid signed helper, root deployment, and TCC approval, the expected state is “未启用”, not a failed policy decision. See [macOS entitlement and privileged-helper setup](docs/macos-entitlement.md).
+
+The standalone helper target is intentionally conservative while its IPC channel is being built: `record` allows, `block` denies, and `ask` denies until the menu-bar notification decision can reach the helper before the kernel deadline. It is not installed automatically by the development build.
 
 The **能力状态** tab has buttons for opening the Full Disk Access page, revealing the current `Agent Guard.app` in Finder, and copying its path. The buttons are useful for the control-plane app during development; the production permission entry must point to the exact signed privileged helper or its approved bundle. The app cannot add itself to the protected list silently; macOS requires the user to confirm the bundle in System Settings.
 

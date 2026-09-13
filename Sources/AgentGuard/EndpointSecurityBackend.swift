@@ -129,29 +129,25 @@ private final class EndpointSecurityRuntime: @unchecked Sendable {
         let decisionCallback = onDecision
         lock.unlock()
 
-        guard let application = configuration.applications.first(where: {
-            Self.applicationMatches($0.path, executablePath: executablePath)
-        }) else { return nil }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard let preview = PolicyPreview.evaluate(
+        guard let match = FileAccessPolicy.evaluate(
             path: path,
-            rules: configuration.rules,
+            executablePath: executablePath,
+            configuration: configuration,
             homeDirectory: home
-        ), let rule = configuration.rules.first(where: {
-            preview.ruleIDs.contains($0.id) && $0.action == preview.action
-        }) ?? configuration.rules.first(where: { preview.ruleIDs.contains($0.id) }) else {
+        ), let rule = match.primaryRule else {
             return nil
         }
 
         let request = EndpointSecurityRequest(
             id: UUID(),
             ruleName: rule.name,
-            applicationName: application.name,
-            configuredAction: preview.action
+            applicationName: match.application.name,
+            configuredAction: match.action
         )
         matchedCallback?(request)
 
-        switch preview.action {
+        switch match.action {
         case .record:
             let decision = EndpointSecurityDecision(request: request, outcome: .recorded)
             decisionCallback?(decision)
@@ -185,19 +181,6 @@ private final class EndpointSecurityRuntime: @unchecked Sendable {
         }
     }
 
-    private static func applicationMatches(_ configuredPath: String, executablePath: String) -> Bool {
-        let configured = normalize(configuredPath)
-        let executable = normalize(executablePath)
-        if configured == executable { return true }
-        // The UI stores an .app bundle path while ES reports the actual helper
-        // executable. Restrict the relationship to Contents/ so a similarly
-        // named sibling cannot become protected accidentally.
-        return configured.hasSuffix(".app") && executable.hasPrefix(configured + "/Contents/")
-    }
-
-    private static func normalize(_ path: String) -> String {
-        URL(fileURLWithPath: path).standardizedFileURL.path
-    }
 }
 
 /// Endpoint Security capability and AUTH_OPEN enforcement seam.

@@ -37,6 +37,47 @@ final class PolicyTests: XCTestCase {
         XCTAssertNil(PolicyPreview.evaluate(path: "/tmp/ordinary", rules: rules, homeDirectory: home))
     }
 
+    func testFileAccessPolicyMatchesAppContentsAndSensitivePath() {
+        var configuration = GuardConfiguration()
+        configuration.applications = [
+            .init(name: "Example", path: "/Applications/Example.app", agentKind: .desktop)
+        ]
+        configuration.rules = [
+            .init(name: "SSH", path: "~/.ssh", scope: .directory, action: .block)
+        ]
+
+        let match = FileAccessPolicy.evaluate(
+            path: home + "/.ssh/id_rsa",
+            executablePath: "/Applications/Example.app/Contents/MacOS/Example",
+            configuration: configuration,
+            homeDirectory: home
+        )
+        XCTAssertEqual(match?.application.name, "Example")
+        XCTAssertEqual(match?.primaryRule?.name, "SSH")
+        XCTAssertEqual(match?.action, .block)
+    }
+
+    func testFileAccessPolicyDoesNotMatchSiblingOrUnconfiguredProcess() {
+        var configuration = GuardConfiguration()
+        configuration.applications = [
+            .init(name: "Example", path: "/Applications/Example.app", agentKind: .desktop)
+        ]
+        configuration.rules = [
+            .init(name: "SSH", path: "~/.ssh", scope: .directory, action: .block)
+        ]
+
+        XCTAssertNil(FileAccessPolicy.evaluate(
+            path: home + "/.ssh/id_rsa",
+            executablePath: "/Applications/Example.app-helper/Contents/MacOS/Helper",
+            configuration: configuration,
+            homeDirectory: home
+        ))
+        XCTAssertFalse(FileAccessPolicy.applicationMatches(
+            configuredPath: "/Applications/Example.app",
+            executablePath: "/Applications/Example.app-helper/Contents/MacOS/Helper"
+        ))
+    }
+
     func testConfigurationRoundTripAndPermissions() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

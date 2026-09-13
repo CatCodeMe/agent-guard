@@ -140,6 +140,65 @@ public enum PolicyPreview {
     }
 }
 
+/// A policy match used by enforcement transports. Keeping this in GuardCore
+/// prevents the UI process and a future privileged helper from implementing
+/// subtly different application/path matching rules.
+public struct FileAccessPolicyMatch: Equatable, Sendable {
+    public let application: WatchedApplication
+    public let rules: [SensitivePathRule]
+    public let action: RuleAction
+
+    public var primaryRule: SensitivePathRule? {
+        rules.first(where: { $0.action == action }) ?? rules.first
+    }
+
+    public init(
+        application: WatchedApplication,
+        rules: [SensitivePathRule],
+        action: RuleAction
+    ) {
+        self.application = application
+        self.rules = rules
+        self.action = action
+    }
+}
+
+public enum FileAccessPolicy {
+    /// Matches one executable event against the configured application and
+    /// sensitive-path rules. This is a pure function: it never touches the
+    /// filesystem and never makes an operating-system authorization decision.
+    public static func evaluate(
+        path: String,
+        executablePath: String,
+        configuration: GuardConfiguration,
+        homeDirectory: String
+    ) -> FileAccessPolicyMatch? {
+        guard let application = configuration.applications.first(where: {
+            applicationMatches(configuredPath: $0.path, executablePath: executablePath)
+        }) else { return nil }
+        guard let preview = PolicyPreview.evaluate(
+            path: path,
+            rules: configuration.rules,
+            homeDirectory: homeDirectory
+        ) else { return nil }
+        let rules = configuration.rules.filter { preview.ruleIDs.contains($0.id) }
+        return FileAccessPolicyMatch(application: application, rules: rules, action: preview.action)
+    }
+
+    public static func applicationMatches(configuredPath: String, executablePath: String) -> Bool {
+        let configured = normalize(configuredPath)
+        let executable = normalize(executablePath)
+        if configured == executable { return true }
+        // Selecting an .app protects only executables below Contents/. A
+        // similarly named sibling bundle or helper remains outside the match.
+        return configured.hasSuffix(".app") && executable.hasPrefix(configured + "/Contents/")
+    }
+
+    private static func normalize(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+}
+
 public enum ConfigurationError: LocalizedError {
     case unsupportedSchema(Int)
 

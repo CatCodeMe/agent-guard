@@ -31,6 +31,19 @@ codesign -d --entitlements :- "build/Agent Guard.app"
 
 验收时应看到 ad-hoc、没有 TeamIdentifier；这类包不能代表已获得 Endpoint Security entitlement。
 
+## 当前已实现的 helper seam
+
+仓库现在包含独立的 `AgentGuardES` executable target。它已经把配置加载、应用/敏感路径匹配和 `AUTH_OPEN` flags 响应放到独立进程中，但还没有安装为 LaunchDaemon，也没有接上 UI IPC：
+
+```sh
+swift build -c release --product AgentGuardES
+sudo .build/arm64-apple-macosx/release/AgentGuardES \
+  --config "$HOME/Library/Application Support/AgentGuard/configuration.json" \
+  --home "$HOME"
+```
+
+当前 `ask` 规则在 IPC 完成前会安全地按阻止处理；这用于验证特权执行器边界，不代表最终通知交互已经完成。
+
 ## 取得签名条件后
 
 在装有完整 Xcode、已加入 Apple Developer Team 且 entitlement 已由 Apple 授权的机器上：
