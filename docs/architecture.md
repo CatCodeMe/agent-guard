@@ -34,6 +34,8 @@ Anthropic sandbox-runtime 使用 TypeScript，依赖 Node.js；macOS 后端使�
 
 当前代码实现本地配置、模拟策略预览、本地通知测试和最小的真实 `AUTH_OPEN` 执行器。点击规则旁的“测试通知”会生成一条明确标注的模拟事件；用户选择允许一次、阻止或打开应用后，事件状态会持久化到审计记录。真实事件只保存规则、应用、动作和结果；不读取或保存文件内容。网络仍未接入 Network Extension，默认 ad-hoc 包也不会宣称已经保护文件。
 
+应用包现在带有独立的 `AppIcon.icns`，本地通知会使用 Agent Guard 图标；系统设置引导位于“能力状态”页。引导只负责打开 Full Disk Access 页面、在 Finder 中定位当前 bundle 和复制路径，用户仍需把正确的已签名 `.app` 拖入系统列表并打开开关。真实 Codex 验收先用受控 `agent-guard-open-probe` 验证授权链路，再让 Codex 打开同一个临时文件；若 Codex 的 helper 位于 `.app` 外部，需要把实际 helper 单独加入应用名单。
+
 ## 审计与统计
 
 `audit.json` 保存最多 500 条元数据事件，按时间倒序写入。每条记录包含来源（模拟或 Endpoint Security）、事件类型、规则名、应用名、配置动作和最终结果。记录页从这些事件派生全部、阻止、允许一次、仅记录等计数；通知动作图标与结果区分显示。`ask` 超过授权 deadline 会记录“超时后阻止”，避免把已经拒绝的系统调用误报为用户允许。

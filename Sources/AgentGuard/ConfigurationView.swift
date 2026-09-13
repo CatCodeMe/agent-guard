@@ -198,7 +198,21 @@ struct ConfigurationView: View {
             capability("敏感文件访问监控", detail: store.endpointSecurityState.label, icon: store.endpointSecurityState == .available ? "checkmark.shield" : "circle.dashed")
             Text(store.endpointSecurityState.detail)
                 .foregroundStyle(.secondary).font(.caption)
-            Button("重新探测 Endpoint Security") { store.probeEndpointSecurity() }
+            HStack(spacing: 10) {
+                Button("打开完全磁盘访问设置") { store.openFullDiskAccessSettings() }
+                Button("在 Finder 中显示 Agent Guard") { store.revealCurrentApplication() }
+                Button("复制应用路径") { store.copyCurrentApplicationPath() }
+                    .help("将当前签名的 Agent Guard.app 路径复制到剪贴板")
+            }
+            Text("真实启用步骤：使用已获 Endpoint Security entitlement 的签名包，点击上面的设置按钮，将当前 Agent Guard.app 拖入“完全磁盘访问”列表并打开开关，然后重新启动应用。当前本地 ad-hoc 包只能运行模拟通知，不能获得系统拦截权限。")
+                .foregroundStyle(.secondary).font(.caption)
+            HStack {
+                Button("重新探测 Endpoint Security") { store.probeEndpointSecurity() }
+                if store.endpointSecurityState == .available {
+                    Label("实时授权后端已连接", systemImage: "checkmark.shield.fill")
+                        .font(.caption).foregroundStyle(.green)
+                }
+            }
             capability("HTTPS 敏感内容检查", detail: "未接入检查代理", icon: "circle.dashed")
             capability("受控启动隔离", detail: store.sandboxRuntimeStatus.label, icon: "circle.dashed")
             Text(store.sandboxRuntimeStatus.detail)

@@ -127,6 +127,27 @@ final class GuardStore: ObservableObject {
         endpointSecurityState = endpointSecurityBackend.state
     }
 
+    func openFullDiskAccessSettings() {
+        let urls = [
+            URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"),
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"),
+        ].compactMap { $0 }
+        guard urls.contains(where: { NSWorkspace.shared.open($0) }) else {
+            configurationError = "无法自动打开完全磁盘访问设置，请从系统设置 > 隐私与安全性 > 完全磁盘访问手动打开。"
+            return
+        }
+        configurationError = nil
+    }
+
+    func revealCurrentApplication() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
+
+    func copyCurrentApplicationPath() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(Bundle.main.bundleURL.path, forType: .string)
+    }
+
     func addRule(_ rule: SensitivePathRule) {
         update {
             guard !$0.rules.contains(where: { $0.path == rule.path && $0.scope == rule.scope }) else { return }
